@@ -1,0 +1,81 @@
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+string = ${ "\"" ~ inner ~ "\"" }
+inner = @{ char* }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+rule_name = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+tag = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+tags = { tag ~ (":" ~ tag)* }
+
+meta_key = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+meta_value = { string | boolean | number }
+boolean = { "true" | "false" }
+meta_pair = { meta_key ~ "=" ~ meta_value }
+meta_block = { "meta:" ~ meta_pair* }
+
+// ------------------------------------------------------
+string_identifier = @{ "$" ~ (ASCII_ALPHANUMERIC | "_")* }
+text_string = @{ "\"" ~ (!NEWLINE ~ ANY)* }
+hex_string = @{ "{" ~ (!NEWLINE ~ ANY)* }
+regular_string = @{ "/" ~ (!NEWLINE ~ ANY)* }
+
+string_definition = ${ 
+    string_identifier ~ 
+    WHITESPACE* ~
+    "=" ~ 
+    WHITESPACE* ~
+    (text_string | hex_string | regular_string) ~
+    NEWLINE
+}
+strings_block = { "strings:" ~ string_definition* }
+
+// 字符串定义
+// string_identifier = @{ "$" ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// string_literal_with_newline = ${string_literal ~ (!"\n" ~ ANY)*}
+// string_literal = ${ "\"" ~ inner_str ~ "\"" }
+// inner_str = @{ (!("\"" | "\\") ~ ANY)* ~ (escape ~ (!("\"" | "\\") ~ ANY)*)* }
+// escape = @{ "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t") }
+
+
+// hex 只需要获得 {} 中的东西
+// hex_string = { "{" ~ (!"}" ~ ANY)* ~ "}" }
+// hex_string_with_newline = { hex_string ~ (!"\n" ~ ANY)* }
+// hex_string = _{ "{" ~ (hex_digit ~ hex_digit ~ " "?)+ ~ "}" }
+// hex_digit = @{ '0'..'9' | 'a'..'f' | 'A'..'F' }
+// ------------------------------------------------------
+
+condition_block = ${ 
+    "condition:" ~  
+    WHITESPACE* ~
+    condition_expr 
+}
+condition_expr = @{ (!("}") ~ ANY)* }
+
+restriction = @{("global" | "private")}
+
+// restrictions = {restriction*}
+
+rule = {
+    restriction* ~
+    "rule" ~ rule_name ~ 
+    (":" ~ tags)? ~
+    "{" ~
+    meta_block? ~
+    strings_block? ~
+    condition_block ~
+    "}"
+}
+
+module = {"import" ~ string}
+
+number = @{ "-"? ~ ASCII_DIGIT+ }
+
+file = { SOI ~ module* ~ rule+ ~ EOI }

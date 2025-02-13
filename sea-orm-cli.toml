@@ -1,0 +1,4 @@
+[sea-orm-cli]
+database_url = "postgres://postgres:postgres@localhost:5432/postgres"
+output_dir = "src/entity"
+features = ["with-chrono"]
