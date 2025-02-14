@@ -345,6 +345,93 @@ async fn delete_yara_file(
     }
 }
 
+#[post("/api/create")]
+async fn api_create(
+    db: web::Data<DatabaseConnection>,
+    req_body: web::Json<models::ApiCreate>,
+) -> impl Responder {
+    let api_create_json = req_body.into_inner();
+    let yara_file = api_create_json.yara_file;
+
+    // compile yara
+    let text_yara = yara_file.to_string();
+    let mut compiler = yara_x::Compiler::new();
+    compiler.add_source(text_yara.as_str()).unwrap();
+    let rules = compiler.build();
+    let compiled_yara = rules.serialize().unwrap();
+    let imports = yara_file.modules.clone();
+
+    let new_yara_file = yara_file::ActiveModel {
+        name: Set(api_create_json.name),
+        last_modified_time: Set(chrono::Utc::now().into()),
+        version: Set(Some(api_create_json.version)),
+        compiled_data: Set(Some(compiled_yara)),
+        description: Set(Some(api_create_json.description)),
+        created_at: NotSet,
+        updated_at: NotSet,
+        category: Set(Some(api_create_json.category)),
+        imports: Set(Some(imports)),
+        ..Default::default()
+    };
+
+    let res = YaraFile::insert(new_yara_file).exec(db.get_ref()).await;
+    let yara_file_id = match res {
+        Ok(inserted) => inserted.last_insert_id,
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+        }
+    };
+
+    let mut rules_id = vec![];
+
+    for item in yara_file.rules {
+        let new_rule = yara_rules::ActiveModel {
+            id: NotSet,
+            name: Set(item.name.clone()),
+            private: Set(Some(item.private)),
+            global: Set(Some(item.global)),
+            auth: Set(Some(item.get_meta_string("auth"))),
+            description: Set(Some(item.get_meta_string("description"))),
+            tag: Set(Some(item.tags.clone())),
+            strings: Set(Some(item.get_strings_vec())),
+            condition: Set(Some(item.condition.clone())),
+            last_modified_time: Set(chrono::Utc::now().into()),
+            loading_time: Set(None),
+            belonging: Set(yara_file_id),
+            verification: Set(Some(item.get_meta_bool("verification"))),
+            source: Set(Some(
+                sea_orm_active_enums::Source::try_from(item.get_meta_string("source").as_str())
+                    .unwrap(),
+            )),
+            version: Set(Some(1)),
+            sharing: Set(Some(
+                sea_orm_active_enums::Sharing::try_from(item.get_meta_string("sharing").as_str())
+                    .unwrap(),
+            )),
+            grayscale: Set(Some(item.get_meta_bool("grayscale"))),
+            attribute: Set(Some(
+                sea_orm_active_enums::Attribute::try_from(
+                    item.get_meta_string("attribute").as_str(),
+                )
+                .unwrap(),
+            )),
+            created_at: NotSet,
+            updated_at: NotSet,
+        };
+
+        let res = YaraRules::insert(new_rule).exec(db.get_ref()).await;
+
+        match res {
+            Ok(inserted) => rules_id.push(inserted.last_insert_id),
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+            }
+        };
+    }
+
+    HttpResponse::Ok().json(json!({"yara_file_id": yara_file_id, "rules_id" : rules_id}))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
@@ -371,6 +458,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_all_yara_files)
             .service(update_yara_file)
             .service(delete_yara_file)
+            .service(api_create)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

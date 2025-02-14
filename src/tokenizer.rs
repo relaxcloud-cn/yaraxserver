@@ -15,26 +15,26 @@ enum MetaValue {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct Meta {
+pub struct Meta {
     key: String,
     value: MetaValue,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct Strings {
+pub struct Strings {
     key: String,
     value: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct YaraRule {
-    name: String,
-    private: bool,
-    global: bool,
-    tags: Vec<String>,
-    meta: Vec<Meta>,
-    strings: Vec<Strings>,
-    condition: String,
+pub struct YaraRule {
+    pub name: String,
+    pub private: bool,
+    pub global: bool,
+    pub tags: Vec<String>,
+    pub meta: Vec<Meta>,
+    pub strings: Vec<Strings>,
+    pub condition: String,
 }
 
 impl YaraRule {
@@ -49,12 +49,66 @@ impl YaraRule {
             condition: String::new(),
         }
     }
+
+    pub fn get_meta_string(&self, key: &str) -> String {
+        let mut final_string = String::new();
+        for i in &self.meta {
+            if i.key == key {
+                match &i.value {
+                    MetaValue::String(v) => final_string += &v,
+                    _ => {}
+                }
+            }
+        }
+        final_string
+    }
+
+    pub fn get_meta_number(&self, key: &str) -> i64 {
+        let mut final_number = 0;
+        for i in &self.meta {
+            if i.key == key {
+                match &i.value {
+                    MetaValue::Number(v) => {
+                        final_number = *v;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        final_number
+    }
+
+    pub fn get_meta_bool(&self, key: &str) -> bool {
+        let mut final_bool = false;
+        for i in &self.meta {
+            if i.key == key {
+                match &i.value {
+                    MetaValue::Boolean(v) => {
+                        final_bool = *v;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        final_bool
+    }
+
+    pub fn get_strings_vec(&self) -> Vec<String> {
+        let mut v = vec![];
+        for i in &self.strings {
+            let string = format!("{} = {}", i.key, i.value);
+            v.push(string);
+        }
+        v
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct YaraFile {
-    modules: Vec<String>,
-    rules: Vec<YaraRule>,
+    pub modules: Vec<String>,
+    pub rules: Vec<YaraRule>,
 }
 
 impl YaraFile {

@@ -3,3 +3,4 @@
 pub use super::yara_file::Entity as YaraFile;
 pub use super::yara_rule_history::Entity as YaraRuleHistory;
 pub use super::yara_rules::Entity as YaraRules;
+pub use super::sea_orm_active_enums;

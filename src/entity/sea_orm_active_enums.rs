@@ -42,3 +42,43 @@ pub enum Source {
     #[serde(rename = "local")]
     Local,
 }
+
+
+impl TryFrom<&str> for Attribute {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "white" => Ok(Attribute::White),
+            "black" => Ok(Attribute::Black),
+            _ => Err(format!("Invalid attribute: {}", s)),
+        }
+    }
+}
+
+impl TryFrom<&str> for Sharing {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "TLP:Red" => Ok(Sharing::TlpRed),
+            "TLP:Amber+Strict" => Ok(Sharing::TlpAmberStrict),
+            "TLP:Amber" => Ok(Sharing::TlpAmber),
+            "TLP:Green" => Ok(Sharing::TlpGreen),
+            "TLP:Clear" => Ok(Sharing::TlpClear),
+            _ => Err(format!("Invalid sharing level: {}", s)),
+        }
+    }
+}
+
+impl TryFrom<&str> for Source {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "official" => Ok(Source::Official),
+            "local" => Ok(Source::Local),
+            _ => Err(format!("Invalid source type: {}", s)),
+        }
+    }
+}

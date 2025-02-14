@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::entity::sea_orm_active_enums::{Source, Sharing, Attribute};
+use crate::tokenizer;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateRule {
@@ -97,4 +98,13 @@ mod base64_serde {
             None => Ok(None),
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct ApiCreate {
+    pub category: String,
+    pub name: String,
+    pub version: i32,
+    pub description: String,
+    pub yara_file: tokenizer::YaraFile
 }
