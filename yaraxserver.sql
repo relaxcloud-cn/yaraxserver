@@ -45,6 +45,7 @@ CREATE TABLE yara_rules (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+
 COMMENT ON COLUMN yara_rules.id IS '规则id，自增id防止重复';
 COMMENT ON COLUMN yara_rules.name IS '规则名称，全局禁止重复';
 COMMENT ON COLUMN yara_rules.private IS '是否为 private 规则';
@@ -65,6 +66,7 @@ COMMENT ON COLUMN yara_rules.grayscale IS '是否为灰度测试规则，默认�
 COMMENT ON COLUMN yara_rules.attribute IS '规则类型，黑名单\白名单';
 COMMENT ON COLUMN yara_rules.created_at IS '规则创建时间';
 COMMENT ON COLUMN yara_rules.updated_at IS '规则更新时间';
+
 
 CREATE TABLE yara_rule_history (
     history_id SERIAL PRIMARY KEY,
@@ -133,3 +135,13 @@ CREATE TRIGGER trg_yara_rules_history
 BEFORE UPDATE ON yara_rules
 FOR EACH ROW
 EXECUTE FUNCTION log_yara_rule_history();
+
+ALTER TABLE yara_file 
+ADD COLUMN category TEXT DEFAULT 'general';
+
+COMMENT ON COLUMN yara_file.category IS '规则文件类别，用于分类管理规则文件';
+
+ALTER TABLE yara_file 
+ADD COLUMN imports TEXT[] DEFAULT '{}';
+
+COMMENT ON COLUMN yara_file.imports IS 'YARA规则文件中导入的模块列表，如pe、elf、math等';
