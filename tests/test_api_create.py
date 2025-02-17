@@ -50,25 +50,46 @@ class TestFlow1(unittest.TestCase):
                     "name": "test_rule",
                     "private": True,
                     "global": False,
-                    "meta": {
-                        "key": "is_production",
-                        "value": {"Boolean": False}
-                    },
-                    "auth": "auth_content",
-                    "description": "Test rule description",
                     "tags": ["tag1", "tag2"],
+                    "meta": [
+                        {
+                            "key": "is_production",
+                            "value": {"Boolean": False}
+                        },
+                        {
+                            "key": "verification",
+                            "value": {"Boolean": True}
+                        },
+                        {
+                            "key": "source",
+                            "value": {"String": 'official'}
+                        },
+                        {
+                            "key": "sharing",
+                            "value": {"String": 'TLP:Red'}
+                        },
+                        {
+                            "key": "grayscale",
+                            "value": {"Boolean": False}
+                        },
+                        {
+                            "key": "attribute",
+                            "value": {"String": "white"}
+                        },
+                        {
+                            "key": "auth",
+                            "value": {"String": "auth_content"}
+                        },
+                        {
+                            "key": "description",
+                            "value": {"String": "Test rule description"}
+                        },
+                    ],
                     "strings": [
                         {"key": "$a", "value": "hello"},
                         {"key": "$b", "value": "/world/"}
                     ],
                     "condition": "any of them",
-                    "belonging": "",
-                    "verification": True,
-                    "source": "official",
-                    "version": 1,
-                    "sharing": "TLP:Red",
-                    "grayscale": False,
-                    "attribute": "white"
                 }]
             }
         }

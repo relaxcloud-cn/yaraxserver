@@ -12,7 +12,7 @@ char = {
 rule_name = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 tag = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-tags = { tag ~ (":" ~ tag)* }
+tags = { tag+ }
 
 meta_key = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 meta_value = { string | boolean | number }

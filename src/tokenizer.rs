@@ -235,7 +235,7 @@ mod test_yara_file_json {
         let yara_str = r#"
 import "pe"
 
-private rule test_rule : tag1 : tag2 {
+private rule test_rule : tag1 tag2 {
     meta:
         description = "Test description"
         version = 1
@@ -302,7 +302,7 @@ impl fmt::Display for YaraFile {
             // Write rule name and tags
             write!(f, "rule {}", rule.name)?;
             if !rule.tags.is_empty() {
-                write!(f, " : {}", rule.tags.join(" : "))?;
+                write!(f, " : {}", rule.tags.join(" "))?;
             }
             writeln!(f, " {{")?;
 
@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn test_rule() -> anyhow::Result<()> {
-        let input = r#"rule ExampleRule : Tag1 : Tag2 {
+        let input = r#"rule ExampleRule : Tag1 Tag2 {
                 meta:
                     description = "Example rule"
                     author = "Example Author"
@@ -735,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_basic_rule() {
-        let yara_rule = r#"rule ExampleRule : Tag1 : Tag2 {
+        let yara_rule = r#"rule ExampleRule : Tag1  Tag2 {
                 meta:
                     description = "Example rule"
                     author = "Example Author"
@@ -780,7 +780,7 @@ mod tests {
         let yara_rule = r#"
         import "pe"
 
-        private global rule ExampleRule : Tag1 : Tag2 {
+        private global rule ExampleRule : Tag1 Tag2 {
                 meta:
                     description = "Example rule"
                     author = "Example Author"
