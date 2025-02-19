@@ -13,6 +13,7 @@ pub enum Attribute {
     #[serde(rename = "black")]
     Black,
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "sharing")]
 pub enum Sharing {
@@ -32,6 +33,7 @@ pub enum Sharing {
     #[serde(rename = "TLP:Clear")]
     TlpClear,
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "source")]
 pub enum Source {
@@ -43,7 +45,6 @@ pub enum Source {
     Local,
 }
 
-
 impl TryFrom<&str> for Attribute {
     type Error = String;
 
@@ -52,6 +53,15 @@ impl TryFrom<&str> for Attribute {
             "white" => Ok(Attribute::White),
             "black" => Ok(Attribute::Black),
             _ => Err(format!("Invalid attribute: {}", s)),
+        }
+    }
+}
+
+impl AsRef<str> for Attribute {
+    fn as_ref(&self) -> &str {
+        match self {
+            Attribute::White => "white",
+            Attribute::Black => "black",
         }
     }
 }
@@ -71,6 +81,18 @@ impl TryFrom<&str> for Sharing {
     }
 }
 
+impl AsRef<str> for Sharing {
+    fn as_ref(&self) -> &str {
+        match self {
+            Sharing::TlpRed => "TLP:Red",
+            Sharing::TlpAmberStrict => "TLP:Amber+Strict",
+            Sharing::TlpAmber => "TLP:Amber",
+            Sharing::TlpGreen => "TLP:Green",
+            Sharing::TlpClear => "TLP:Clear",
+        }
+    }
+}
+
 impl TryFrom<&str> for Source {
     type Error = String;
 
@@ -79,6 +101,15 @@ impl TryFrom<&str> for Source {
             "official" => Ok(Source::Official),
             "local" => Ok(Source::Local),
             _ => Err(format!("Invalid source type: {}", s)),
+        }
+    }
+}
+
+impl AsRef<str> for Source {
+    fn as_ref(&self) -> &str {
+        match self {
+            Source::Official => "official",
+            Source::Local => "local",
         }
     }
 }

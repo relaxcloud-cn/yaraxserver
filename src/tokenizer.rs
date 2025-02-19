@@ -8,7 +8,7 @@ use serde_json;
 struct YaraParser;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-enum MetaValue {
+pub enum MetaValue {
     String(String),
     Number(i64),
     Boolean(bool),
@@ -16,14 +16,14 @@ enum MetaValue {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Meta {
-    key: String,
-    value: MetaValue,
+    pub key: String,
+    pub value: MetaValue,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Strings {
-    key: String,
-    value: String,
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -50,51 +50,47 @@ impl YaraRule {
         }
     }
 
-    pub fn get_meta_string(&self, key: &str) -> String {
-        let mut final_string = String::new();
-        for i in &self.meta {
-            if i.key == key {
-                match &i.value {
-                    MetaValue::String(v) => final_string += &v,
-                    _ => {}
+    pub fn get_meta_string(&self, key: &str) -> Option<String> {
+        self.meta.iter().find_map(|item| {
+            if item.key == key {
+                if let MetaValue::String(ref v) = item.value {
+                    Some(v.clone())
+                } else {
+                    None
                 }
+            } else {
+                None
             }
-        }
-        final_string
+        })
     }
 
-    pub fn get_meta_number(&self, key: &str) -> i64 {
-        let mut final_number = 0;
-        for i in &self.meta {
-            if i.key == key {
-                match &i.value {
-                    MetaValue::Number(v) => {
-                        final_number = *v;
-                        break;
-                    }
-                    _ => {}
+    pub fn get_meta_number(&self, key: &str) -> Option<i64> {
+        self.meta.iter().find_map(|item| {
+            if item.key == key {
+                if let MetaValue::Number(v) = item.value {
+                    Some(v)
+                } else {
+                    None
                 }
+            } else {
+                None
             }
-        }
-        final_number
+        })
     }
 
-    pub fn get_meta_bool(&self, key: &str) -> bool {
-        let mut final_bool = false;
-        for i in &self.meta {
-            if i.key == key {
-                match &i.value {
-                    MetaValue::Boolean(v) => {
-                        final_bool = *v;
-                        break;
-                    }
-                    _ => {}
+    pub fn get_meta_bool(&self, key: &str) -> Option<bool> {
+        self.meta.iter().find_map(|item| {
+            if item.key == key {
+                if let MetaValue::Boolean(v) = item.value {
+                    Some(v)
+                } else {
+                    None
                 }
+            } else {
+                None
             }
-        }
-        final_bool
+        })
     }
-
     pub fn get_strings_vec(&self) -> Vec<String> {
         let mut v = vec![];
         for i in &self.strings {
@@ -529,6 +525,70 @@ private global rule test : my_test {
 "#;
 
         assert_eq!(yara_file.to_string(), expected_string.to_string());
+
+        Ok(())
+    }
+}
+
+impl YaraFile {
+    pub fn merge(&mut self, other: YaraFile) {
+        // Merge modules
+        for module in other.modules {
+            if !self.modules.contains(&module) {
+                self.modules.push(module);
+            }
+        }
+
+        // Merge rules
+        self.rules.extend(other.rules);
+    }
+}
+
+pub fn parse_strings_vec(input: Vec<String>) -> anyhow::Result<Vec<Strings>> {
+    let mut final_strings = vec![];
+    for i in input {
+        let tmp_string = i + "\n";
+        let pairs = YaraParser::parse(Rule::string_definition, tmp_string.as_str())?;
+        for pair in pairs {
+            match pair.as_rule() {
+                Rule::string_definition => {
+                    let mut string_iter = pair.into_inner();
+                    let id = string_iter.next().unwrap().as_str().to_string();
+                    let value = string_iter.next().unwrap().as_str().to_string();
+                    final_strings.push(Strings {
+                        key: id,
+                        value: value,
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(final_strings)
+}
+
+#[cfg(test)]
+mod tests_parse_string {
+    use super::*;
+
+    #[test]
+    fn test_parse_strings_vec() -> anyhow::Result<()> {
+        // 注意：grammar 定义中 string_definition 需要以换行结束，因此测试输入字符串必须以 "\n" 结尾。
+        let inputs = vec![
+            // "$s = \"hello world\"\n".to_string(),
+            // "$t = /regex pattern/\n".to_string(),
+            "$s = \"hello world\"".to_string(),
+            "$t = /regex pattern/".to_string(),
+        ];
+
+        let result = parse_strings_vec(inputs)?;
+        assert_eq!(result.len(), 2);
+        // 根据你定义的 grammar，string_identifier 会匹配到 "$s"、"$t"
+        // 而 text_string 匹配的内容会保留引号或斜杠，取决你实际的实现方式
+        assert_eq!(result[0].key, "$s");
+        assert_eq!(result[0].value, "\"hello world\"");
+        assert_eq!(result[1].key, "$t");
+        assert_eq!(result[1].value, "/regex pattern/");
 
         Ok(())
     }

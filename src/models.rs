@@ -1,8 +1,8 @@
 // src/models.rs
 
-use serde::{Deserialize, Serialize};
-use crate::entity::sea_orm_active_enums::{Source, Sharing, Attribute};
+use crate::entity::sea_orm_active_enums::{Attribute, Sharing, Source};
 use crate::tokenizer;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateRule {
@@ -47,7 +47,7 @@ pub struct UpdateYaraFile {
     pub name: Option<String>,
     pub last_modified_time: Option<chrono::DateTime<chrono::Utc>>,
     pub version: Option<i32>,
-    #[serde(with = "base64_serde")] 
+    #[serde(with = "base64_serde")]
     pub compiled_data: Option<Vec<u8>>,
     pub description: Option<String>,
     pub category: Option<String>,
@@ -58,7 +58,7 @@ pub struct YaraFileWeb {
     pub name: String,
     pub last_modified_time: Option<chrono::DateTime<chrono::Utc>>,
     pub version: Option<i32>,
-    #[serde(with = "base64_serde")] 
+    #[serde(with = "base64_serde")]
     pub compiled_data: Option<Vec<u8>>,
     pub description: Option<String>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -66,15 +66,11 @@ pub struct YaraFileWeb {
     pub category: Option<String>,
 }
 
-
 mod base64_serde {
-    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-    use serde::{self, Deserialize, Serializer, Deserializer};
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    use serde::{self, Deserialize, Deserializer, Serializer};
 
-    pub fn serialize<S>(
-        bytes: &Option<Vec<u8>>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(bytes: &Option<Vec<u8>>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -84,17 +80,13 @@ mod base64_serde {
         }
     }
 
-    pub fn deserialize<'de, D>(
-        deserializer: D,
-    ) -> Result<Option<Vec<u8>>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s: Option<String> = Option::deserialize(deserializer)?;
         match s {
-            Some(s) => BASE64.decode(s)
-                .map(Some)
-                .map_err(serde::de::Error::custom),
+            Some(s) => BASE64.decode(s).map(Some).map_err(serde::de::Error::custom),
             None => Ok(None),
         }
     }
@@ -106,5 +98,12 @@ pub struct ApiCreate {
     pub name: String,
     pub version: i32,
     pub description: String,
-    pub yara_file: tokenizer::YaraFile
+    pub yara_file: tokenizer::YaraFile,
+}
+
+#[derive(Deserialize)]
+pub struct ApiAdd {
+    pub version: i32,
+    pub yara_file_id: i32,
+    pub yara_file: tokenizer::YaraFile,
 }
