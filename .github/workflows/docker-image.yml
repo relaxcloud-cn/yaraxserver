@@ -1,0 +1,29 @@
+name: Build Docker Image and Generate Tar
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      
+    - name: Build Docker image
+      run: |
+        docker build -t yaraxserver:${{ github.sha }} .
+        
+    - name: Save Docker image
+      run: |
+        docker save yaraxserver:${{ github.sha }} > yaraxserver.tar
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image
+        path: yaraxserver.tar
