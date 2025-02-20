@@ -18,3 +18,7 @@ sea-orm-migration = "1.1"
 dotenvy = "0.15.7"
 chrono = "0.4.39"
 base64 = "0.22.1"
+env_logger = "0.10"
+log = "0.4"
+clap = { version = "4.4", features = ["derive"] }
+colored = "*"

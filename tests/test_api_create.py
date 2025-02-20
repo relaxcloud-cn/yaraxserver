@@ -19,8 +19,8 @@ class TestFlow1(unittest.TestCase):
                 "modules": ["pe"],
                 "rules": [{
                     "name": "test_rule",
-                    "private": True,
-                    "global": False,
+                    "private": False,
+                    "global": True,
                     "tags": ["tag1", "tag2"],
                     "meta": [
                         {
@@ -57,7 +57,7 @@ class TestFlow1(unittest.TestCase):
                         },
                     ],
                     "strings": [
-                        {"key": "$a", "value": "\"hello\""},
+                        {"key": "$a", "value": "\"5O\""},
                         {"key": "$b", "value": "/world/"}
                     ],
                     "condition": "any of them",
