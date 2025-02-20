@@ -7,7 +7,11 @@ RUN cargo build --release
 COPY . .
 RUN cargo build --release
 
-FROM debian:buster-slim
+FROM ubuntu:22.04
 WORKDIR /app
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/yaraxserver .
 CMD ["./yaraxserver"]
