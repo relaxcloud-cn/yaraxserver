@@ -57,7 +57,7 @@ class TestFlow1(unittest.TestCase):
                         },
                     ],
                     "strings": [
-                        {"key": "$a", "value": "\"5O\""},
+                        {"key": "$a", "value": "\"some\""},
                         {"key": "$b", "value": "/world/"}
                     ],
                     "condition": "any of them",

@@ -6,10 +6,9 @@ class TestScanApi(unittest.TestCase):
     def setUp(self):
         self.url = 'http://localhost:8080/api/scan'
         self.malicious_content = """
-        X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
+        fakdslfa 
 
-        world
-
+        some
         
         """
         self.file_obj = io.BytesIO(self.malicious_content.encode('utf-8'))

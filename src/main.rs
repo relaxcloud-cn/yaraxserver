@@ -1319,6 +1319,18 @@ struct CategoryResult {
     pub category: Option<String>,
 }
 
+#[post("/api/reload")]
+async fn api_reload(
+    db: web::Data<DatabaseConnection>,
+    pool: web::Data<YaraRulesPool>,
+) -> impl Responder {
+    match hot_update_all(&db, &pool).await {
+        Ok(_) => HttpResponse::Ok().body("Hot update triggered successfully!"),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Error: {:?}", e)),
+    }
+}
+
+
 pub async fn hot_update_all(
     db: &DatabaseConnection,
     pool: &web::Data<YaraRulesPool>,
@@ -1630,6 +1642,7 @@ async fn main() -> std::io::Result<()> {
             .service(api_yara_file_get)
             .service(api_yara_file_page)
             .service(api_scan)
+            .service(api_reload)
     })
     .bind((args.host, args.port))?
     .run()
