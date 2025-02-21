@@ -1608,7 +1608,6 @@ async fn main() -> std::io::Result<()> {
         Ok(_) => info!("init successfully!"),
         Err(e) => {
             error!("Error: {}", e);
-            panic!();
         }
     }
 
