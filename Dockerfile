@@ -2,7 +2,7 @@ FROM rust:1.85.0 as builder
 
 WORKDIR /usr/src/app
 
-COPY src src
+COPY . .
 
 RUN cargo build --release
 
