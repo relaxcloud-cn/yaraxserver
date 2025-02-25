@@ -17,13 +17,13 @@ use std::time::Instant;
 // use env_logger;
 // use log::Record;
 use log::{error, info};
-use sea_orm::{DbErr, PaginatorTrait};
 use sea_orm::QueryOrder;
 use sea_orm::QuerySelect;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, ModelTrait,
     QueryFilter, Set,
 };
+use sea_orm::{DbErr, PaginatorTrait};
 use sea_orm::{FromQueryResult, IntoActiveModel};
 use std::cmp::min;
 // use std::fs::File;
@@ -428,12 +428,24 @@ async fn api_create(
     let api_create_json = req_body.into_inner();
     let yara_file = api_create_json.yara_file;
 
-    // compile yara
+    // Try to compile the YARA file
     let text_yara = yara_file.to_string();
     let mut compiler = yara_x::Compiler::new();
-    compiler.add_source(text_yara.as_str()).unwrap();
+    if let Err(e) = compiler.add_source(text_yara.as_str()) {
+        return HttpResponse::InternalServerError()
+            .json(json!({"message": format!("Failed to add YARA source: {}", e)}));
+    }
+
     let rules = compiler.build();
-    let compiled_yara = rules.serialize().unwrap();
+
+    let compiled_yara = match rules.serialize() {
+        Ok(data) => data,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(json!({"message": format!("Failed to serialize YARA rules: {}", e)}))
+        }
+    };
+
     let imports = yara_file.modules.clone();
 
     let new_yara_file = yara_file::ActiveModel {
@@ -453,17 +465,24 @@ async fn api_create(
     let yara_file_id = match res {
         Ok(inserted) => inserted.last_insert_id,
         Err(e) => {
-            return HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+            return HttpResponse::InternalServerError()
+                .json(json!({"message": format!("Database insertion failed: {}", e)}))
         }
     };
 
-    let rules_id = create_or_update_rules_via_id(&db, yara_file.rules, yara_file_id)
-        .await
-        .unwrap();
+    let rules_id = match create_or_update_rules_via_id(&db, yara_file.rules, yara_file_id).await {
+        Ok(id) => id,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(json!({"message": format!("Failed to update rules: {}", e)}))
+        }
+    };
 
-    HttpResponse::Ok().json(json!({"yara_file_id": yara_file_id, "rules_id" : rules_id}))
+    HttpResponse::Ok().json(json!({
+        "yara_file_id": yara_file_id,
+        "rules_id": rules_id
+    }))
 }
-
 #[post("/api/add")]
 async fn api_add(
     db: web::Data<DatabaseConnection>,
@@ -1577,23 +1596,21 @@ struct CategoryResultApi {
     category: String,
 }
 
-
 #[get("/api/categories")]
 pub async fn api_categories(db: web::Data<DatabaseConnection>) -> impl Responder {
     let query_result: Result<Vec<CategoryResultApi>, DbErr> = yara_file::Entity::find()
-        .select_only() 
+        .select_only()
         .column(yara_file::Column::Category)
         .distinct()
         .filter(yara_file::Column::Category.is_not_null())
-        .into_model::<CategoryResultApi>()  
+        .into_model::<CategoryResultApi>()
         .all(db.get_ref())
         .await;
-    
+
     let categories = match query_result {
         Ok(cats) => cats,
         Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Database error: {}", e));
+            return HttpResponse::InternalServerError().body(format!("Database error: {}", e));
         }
     };
 
