@@ -23,7 +23,13 @@ meta_block = { "meta:" ~ meta_pair* }
 // ------------------------------------------------------
 string_identifier = @{ "$" ~ (ASCII_ALPHANUMERIC | "_")* }
 text_string = @{ "\"" ~ (!NEWLINE ~ ANY)* }
-hex_string = @{ "{" ~ (!NEWLINE ~ ANY)* }
+// hex_string = @{ "{" ~ (!NEWLINE ~ ANY)* }
+hex_string = @{ 
+    "{" 
+    ~ (!"}" ~ ANY)* 
+    ~ "}" 
+    ~ (!NEWLINE ~ ANY)* 
+}
 regular_string = @{ "/" ~ (!NEWLINE ~ ANY)* }
 
 string_definition = ${ 

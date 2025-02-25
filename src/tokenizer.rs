@@ -997,4 +997,64 @@ mod tests {
         assert_eq!(rule.meta[1].value, MetaValue::Number(100));
         assert_eq!(rule.meta[2].value, MetaValue::Boolean(true));
     }
+
+    #[test]
+    fn test_rule_file_1() {
+        let yara_rule = r#"
+rule XProtect_MACOS_cbb1424
+{
+    meta:
+        description = "MACOS.cbb1424"
+        uuid = "7841FF62-3CE2-43B0-A978-A3EF39203060"
+    strings:
+        $a = {
+			48 63 85 ?? ?? ?? ??
+			8B 84 85 ?? ?? ?? ??
+			88 85 ?? ?? ?? ??
+			8A 85 ?? ?? ?? ??
+			48 63 8D ?? ?? ?? ??
+			88 84 0D ?? ?? ?? ??
+			8B 85 ?? ?? ?? ??
+			83 C0 01
+			89 85 ?? ?? ?? ??
+		}
+        $b = {
+			66 ( 41 0f | 0F ) ( 6F | 6f 44 ) ( 04 | 05 ) 0?
+			66 0F 38 00 C1
+			( 66 41 0F 7E 45 ?? | 66 0F 7e 03 )
+			( 48 | 49 ) 83 C? 10
+			( 48 | 49 ) 83 C? 04
+			( 4? 81 F? | 48 3D ??) [3-4]
+			75 ??
+		}
+    condition:
+        Macho and any of them
+}
+        "#;
+
+        let yara_file = parse_yara_rule(yara_rule).unwrap();
+        let rules = yara_file.rules;
+        let rule = &rules[0];
+        assert_eq!(
+            rule.meta[0].value,
+            MetaValue::String("MACOS.cbb1424".to_string())
+        );
+        // assert_eq!(rule.meta[1].value, MetaValue::Boolean(true));
+        // assert_eq!(rule.meta[2].value, MetaValue::Number(2));
+    }
+
+    // #[test]
+    // fn test_rule_file_2() {
+    //     let yara_rule = std::fs::read_to_string("/Users/somnambulatory/Downloads/XProtect.yara").unwrap();
+
+    //     let yara_file = parse_yara_rule(&yara_rule).unwrap();
+    //     let rules = yara_file.rules;
+    //     let rule = &rules[0];
+    //     assert_eq!(
+    //         rule.meta[0].value,
+    //         MetaValue::String("MACOS.44db411".to_string())
+    //     );
+    //     assert_eq!(rule.meta[1].value, MetaValue::Boolean(true));
+    //     assert_eq!(rule.meta[2].value, MetaValue::Number(2));
+    // }
 }
