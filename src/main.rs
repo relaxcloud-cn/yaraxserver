@@ -17,7 +17,7 @@ use std::time::Instant;
 // use env_logger;
 // use log::Record;
 use log::{error, info};
-use sea_orm::PaginatorTrait;
+use sea_orm::{DbErr, PaginatorTrait};
 use sea_orm::QueryOrder;
 use sea_orm::QuerySelect;
 use sea_orm::{
@@ -1330,7 +1330,6 @@ async fn api_reload(
     }
 }
 
-
 pub async fn hot_update_all(
     db: &DatabaseConnection,
     pool: &web::Data<YaraRulesPool>,
@@ -1549,6 +1548,35 @@ pub async fn api_scan(
     }))
 }
 
+#[derive(Debug, FromQueryResult)]
+struct CategoryResultApi {
+    category: String,
+}
+
+
+#[get("/api/categories")]
+pub async fn api_categories(db: web::Data<DatabaseConnection>) -> impl Responder {
+    let query_result: Result<Vec<CategoryResultApi>, DbErr> = yara_file::Entity::find()
+        .select_only() 
+        .column(yara_file::Column::Category)
+        .distinct()
+        .filter(yara_file::Column::Category.is_not_null())
+        .into_model::<CategoryResultApi>()  
+        .all(db.get_ref())
+        .await;
+    
+    let categories = match query_result {
+        Ok(cats) => cats,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Database error: {}", e));
+        }
+    };
+
+    let unique_categories: Vec<String> = categories.into_iter().map(|cat| cat.category).collect();
+
+    HttpResponse::Ok().json(unique_categories)
+}
 use clap::Parser;
 
 #[derive(Parser)]
@@ -1642,6 +1670,7 @@ async fn main() -> std::io::Result<()> {
             .service(api_yara_file_page)
             .service(api_scan)
             .service(api_reload)
+            .service(api_categories)
     })
     .bind((args.host, args.port))?
     .run()
