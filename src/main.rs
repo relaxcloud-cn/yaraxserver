@@ -483,6 +483,96 @@ async fn api_create(
         "rules_id": rules_id
     }))
 }
+#[derive(Debug, MultipartForm)]
+struct UploadFormApiCreateFile {
+    category: Text<String>,
+    name: Text<String>,
+    version: Text<i32>,
+    description: Text<String>,
+    #[multipart(limit = "100MB")]
+    file: TempFile,
+}
+
+#[post("/api/create/file")]
+async fn api_create_file(
+    db: web::Data<DatabaseConnection>,
+    MultipartForm(mut form): MultipartForm<UploadFormApiCreateFile>,
+) -> impl Responder {
+    // let api_create_json = req_body.into_inner();
+    let mut buffer = vec![];
+    // let response_str;
+    let _ = form.file.file.read_to_end(&mut buffer);
+    let s = String::from_utf8(buffer);
+    let yara_file: tokenizer::YaraFile;
+    match s {
+        Ok(str) => match tokenizer::YaraFile::from_str(&str) {
+            Ok(f) => yara_file = f,
+            Err(e) => return HttpResponse::Ok().json(json!({"message": e.to_string()})),
+        },
+        Err(e) => return HttpResponse::Ok().json(json!({"message": e.to_string()})),
+    }
+
+    let name: String = form.name.into_inner();
+    let version_: i32 = form.version.into_inner();
+    let description: String = form.description.into_inner();
+    let category: String = form.category.into_inner();
+
+    // Try to compile the YARA file
+    let text_yara = yara_file.to_string();
+    let mut compiler = yara_x::Compiler::new();
+    if let Err(e) = compiler.add_source(text_yara.as_str()) {
+        return HttpResponse::InternalServerError()
+            .json(json!({"message": format!("Failed to add YARA source: {}", e)}));
+    }
+
+    let rules = compiler.build();
+
+    let compiled_yara = match rules.serialize() {
+        Ok(data) => data,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(json!({"message": format!("Failed to serialize YARA rules: {}", e)}))
+        }
+    };
+
+    let imports = yara_file.modules.clone();
+
+    let new_yara_file = yara_file::ActiveModel {
+        name: Set(name),
+        last_modified_time: Set(chrono::Utc::now().into()),
+        version: Set(Some(version_)),
+        compiled_data: Set(Some(compiled_yara)),
+        description: Set(Some(description)),
+        created_at: NotSet,
+        updated_at: NotSet,
+        category: Set(Some(category)),
+        imports: Set(Some(imports)),
+        ..Default::default()
+    };
+
+    let res = YaraFile::insert(new_yara_file).exec(db.get_ref()).await;
+    let yara_file_id = match res {
+        Ok(inserted) => inserted.last_insert_id,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(json!({"message": format!("Database insertion failed: {}", e)}))
+        }
+    };
+
+    let rules_id = match create_or_update_rules_via_id(&db, yara_file.rules, yara_file_id).await {
+        Ok(id) => id,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .json(json!({"message": format!("Failed to update rules: {}", e)}))
+        }
+    };
+
+    HttpResponse::Ok().json(json!({
+        "yara_file_id": yara_file_id,
+        "rules_id": rules_id
+    }))
+}
+
 #[post("/api/add")]
 async fn api_add(
     db: web::Data<DatabaseConnection>,
@@ -611,34 +701,29 @@ pub async fn create_or_update_rules_via_id(
                 verification: Set(item.get_meta_bool("verification")),
                 source: Set(Some(
                     sea_orm_active_enums::Source::try_from(
-                        item.get_meta_string("source")
-                            .unwrap_or_else(|| "".to_string())
-                            .as_str(),
+                        item.get_meta_string("source").unwrap_or_default().as_str(),
                     )
-                    .unwrap(),
+                    .unwrap_or(sea_orm_active_enums::Source::Official),
                 )),
                 version: Set(Some(1)),
                 sharing: Set(Some(
                     sea_orm_active_enums::Sharing::try_from(
-                        item.get_meta_string("sharing")
-                            .unwrap_or_else(|| "".to_string())
-                            .as_str(),
+                        item.get_meta_string("sharing").unwrap_or_default().as_str(),
                     )
-                    .unwrap(),
+                    .unwrap_or(sea_orm_active_enums::Sharing::TlpRed),
                 )),
                 grayscale: Set(item.get_meta_bool("grayscale")),
                 attribute: Set(Some(
                     sea_orm_active_enums::Attribute::try_from(
                         item.get_meta_string("attribute")
-                            .unwrap_or_else(|| "".to_string())
+                            .unwrap_or_default()
                             .as_str(),
                     )
-                    .unwrap(),
+                    .unwrap_or(sea_orm_active_enums::Attribute::White),
                 )),
                 created_at: sea_orm::ActiveValue::NotSet,
                 updated_at: sea_orm::ActiveValue::NotSet,
             };
-
             let insert_result = yara_rules::Entity::insert(new_rule).exec(db).await?;
             rules_ids.push(insert_result.last_insert_id.into());
         }
@@ -1701,6 +1786,7 @@ async fn main() -> std::io::Result<()> {
             .service(update_yara_file)
             .service(delete_yara_file)
             .service(api_create)
+            .service(api_create_file)
             .service(api_add)
             .service(api_update)
             .service(api_rule_delete)
