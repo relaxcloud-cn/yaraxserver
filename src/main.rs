@@ -1085,6 +1085,30 @@ async fn api_rule_page(
     }
 }
 
+/// GET /api/rule/history?id={id}
+/// 根据规则 id 查询对应的历史记录
+#[get("/api/rule/history")]
+async fn api_rule_history(
+    db: web::Data<sea_orm::DatabaseConnection>,
+    web::Query(info): web::Query<IdParam>,
+) -> impl Responder {
+    let rule_id = info.id;
+
+    // 使用历史记录实体进行查询，此处假定历史记录的实体名称是 `yara_rule_history::Entity`
+    let histories_result = YaraRuleHistory::find()
+        .filter(entity::yara_rule_history::Column::RuleId.eq(rule_id))
+        .all(db.get_ref())
+        .await;
+
+    match histories_result {
+        Ok(histories) => HttpResponse::Ok().json(histories),
+        Err(e) => {
+            eprintln!("Error fetching histories for rule id {}: {:?}", rule_id, e);
+            HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+        }
+    }
+}
+
 /// ------------------- APIs for Yara Files ------------------------------
 
 /// GET /api/yara_file/get?id={id}
@@ -1671,6 +1695,7 @@ async fn main() -> std::io::Result<()> {
             .service(api_scan)
             .service(api_reload)
             .service(api_categories)
+            .service(api_rule_history)
     })
     .bind((args.host, args.port))?
     .run()
