@@ -1236,17 +1236,27 @@ async fn api_yara_file_get(
     }
 }
 
-#[derive(serde::Serialize)]
-struct YaraFileWithoutCompiledData {
+use chrono::DateTime;
+
+#[derive(Serialize)]
+struct YaraFileWithRules {
     id: i32,
     name: String,
-    last_modified_time: chrono::DateTime<chrono::Utc>,
+    last_modified_time: DateTime<Utc>,
     version: Option<i32>,
     description: Option<String>,
-    created_at: Option<chrono::DateTime<chrono::Utc>>,
-    updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    created_at: Option<DateTime<Utc>>,
+    updated_at: Option<DateTime<Utc>>,
     category: Option<String>,
     imports: Option<Vec<String>>,
+
+    rules: Vec<YaraRuleSummary>,
+}
+
+#[derive(Serialize)]
+struct YaraRuleSummary {
+    id: i32,
+    name: String,
 }
 
 #[get("/api/yara_file/page")]
@@ -1258,35 +1268,49 @@ async fn api_yara_file_page(
     let per_page: u32 = pagination.per_page.unwrap_or(10);
     let offset = (page - 1) * per_page;
 
-    // 获取分页数据
-    let files_result = yara_file::Entity::find()
+    // 使用 eager loading 同时查询 yara_file 与其关联的 yara_rules
+    let file_with_rules_result = yara_file::Entity::find()
         .order_by_asc(yara_file::Column::Id)
         .limit(per_page as u64)
         .offset(offset as u64)
+        .find_with_related(yara_rules::Entity)
         .all(db.get_ref())
         .await;
-    // 查询总数
+
+    // 分页查询总数
     let count_result = yara_file::Entity::find().count(db.get_ref()).await;
 
-    match (files_result, count_result) {
-        (Ok(files), Ok(total)) => {
-            // 将查询到的 files 映射为不包含 compiled_data 的数据结构
-            let items: Vec<YaraFileWithoutCompiledData> = files
+    match (file_with_rules_result, count_result) {
+        (Ok(files_with_rules), Ok(total)) => {
+            // files_with_rules 的类型为 Vec<(yara_file::Model, Vec<yara_rules::Model>)>
+            let items: Vec<YaraFileWithRules> = files_with_rules
                 .into_iter()
-                .map(|file| YaraFileWithoutCompiledData {
-                    id: file.id,
-                    name: file.name,
-                    // 使用 .into() 将 DateTime<FixedOffset> 转换为 DateTime<Utc>
-                    last_modified_time: file.last_modified_time.into(),
-                    version: file.version,
-                    description: file.description,
-                    // 对 Option 类型使用 map 来转换
-                    created_at: file.created_at.map(|dt| dt.into()),
-                    updated_at: file.updated_at.map(|dt| dt.into()),
-                    category: file.category,
-                    imports: file.imports,
+                .map(|(file, rules)| {
+                    // 提取 rule 的摘要信息，仅保留 id 与 name
+                    let rule_summaries: Vec<YaraRuleSummary> = rules
+                        .into_iter()
+                        .map(|rule| YaraRuleSummary {
+                            id: rule.id,
+                            name: rule.name,
+                        })
+                        .collect();
+
+                    YaraFileWithRules {
+                        id: file.id,
+                        name: file.name,
+                        // 使用 .into() 或 .with_timezone(&Utc) 将 DateTime<FixedOffset> 转换为 DateTime<Utc>
+                        last_modified_time: file.last_modified_time.into(),
+                        version: file.version,
+                        description: file.description,
+                        created_at: file.created_at.map(|dt| dt.into()),
+                        updated_at: file.updated_at.map(|dt| dt.into()),
+                        category: file.category,
+                        imports: file.imports,
+                        rules: rule_summaries,
+                    }
                 })
                 .collect();
+
             HttpResponse::Ok().json(json!({
                 "page": page,
                 "per_page": per_page,
@@ -1296,7 +1320,7 @@ async fn api_yara_file_page(
         }
         (Err(e), _) | (_, Err(e)) => {
             eprintln!("Error during paginated yara file query: {:?}", e);
-            HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+            HttpResponse::InternalServerError().json(json!({ "message": e.to_string() }))
         }
     }
 }
@@ -1837,7 +1861,7 @@ async fn main() -> std::io::Result<()> {
 
 // 附件解析逻辑
 use base64::{prelude::BASE64_STANDARD, Engine};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::str;
 
 #[derive(Debug, Deserialize)]
