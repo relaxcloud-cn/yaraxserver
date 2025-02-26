@@ -1236,8 +1236,19 @@ async fn api_yara_file_get(
     }
 }
 
-/// GET /api/yara_file/page?page={page}&per_page={per_page}
-/// 分页获得 yara file 信息
+#[derive(serde::Serialize)]
+struct YaraFileWithoutCompiledData {
+    id: i32,
+    name: String,
+    last_modified_time: chrono::DateTime<chrono::Utc>,
+    version: Option<i32>,
+    description: Option<String>,
+    created_at: Option<chrono::DateTime<chrono::Utc>>,
+    updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    category: Option<String>,
+    imports: Option<Vec<String>>,
+}
+
 #[get("/api/yara_file/page")]
 async fn api_yara_file_page(
     db: web::Data<sea_orm::DatabaseConnection>,
@@ -1258,12 +1269,31 @@ async fn api_yara_file_page(
     let count_result = yara_file::Entity::find().count(db.get_ref()).await;
 
     match (files_result, count_result) {
-        (Ok(files), Ok(total)) => HttpResponse::Ok().json(json!({
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "items": files
-        })),
+        (Ok(files), Ok(total)) => {
+            // 将查询到的 files 映射为不包含 compiled_data 的数据结构
+            let items: Vec<YaraFileWithoutCompiledData> = files
+                .into_iter()
+                .map(|file| YaraFileWithoutCompiledData {
+                    id: file.id,
+                    name: file.name,
+                    // 使用 .into() 将 DateTime<FixedOffset> 转换为 DateTime<Utc>
+                    last_modified_time: file.last_modified_time.into(),
+                    version: file.version,
+                    description: file.description,
+                    // 对 Option 类型使用 map 来转换
+                    created_at: file.created_at.map(|dt| dt.into()),
+                    updated_at: file.updated_at.map(|dt| dt.into()),
+                    category: file.category,
+                    imports: file.imports,
+                })
+                .collect();
+            HttpResponse::Ok().json(json!({
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "items": items
+            }))
+        }
         (Err(e), _) | (_, Err(e)) => {
             eprintln!("Error during paginated yara file query: {:?}", e);
             HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
