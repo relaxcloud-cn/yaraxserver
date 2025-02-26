@@ -1153,38 +1153,166 @@ async fn api_rule_one(
     }
 }
 
+/// 用于分页查询的参数
+#[derive(Debug, serde::Deserialize)]
+struct PaginationParamsApiRulePage {
+    page: Option<u32>,
+    per_page: Option<u32>,
+    file_info: Option<bool>,
+}
+
+// 定义返回给前端的 file 信息结构，排除掉 compiled_data 字段
+#[derive(Serialize)]
+struct YaraFileWithoutCompiledData {
+    id: i32,
+    name: String,
+    last_modified_time: DateTime<Utc>,
+    version: Option<i32>,
+    description: Option<String>,
+    created_at: Option<DateTime<Utc>>,
+    updated_at: Option<DateTime<Utc>>,
+    category: Option<String>,
+    imports: Option<Vec<String>>,
+}
+
+// 当 include_file 为 true 时，返回的新结构体，包含 rule 信息及其所属的 file 信息
+#[derive(Serialize)]
+struct RuleWithFile {
+    // 以下字段为 yara rule 的关键信息，可根据需要增加其他字段
+    id: i32,
+    name: String,
+    private: Option<bool>,
+    global: Option<bool>,
+    auth: Option<String>,
+    description: Option<String>,
+    tag: Option<Vec<String>>,
+    strings: Option<Vec<String>>,
+    condition: Option<String>,
+    last_modified_time: DateTime<Utc>,
+    loading_time: Option<DateTime<Utc>>,
+    belonging: i32,
+    verification: Option<bool>,
+    // 注意：Source, Sharing, Attribute 等自定义枚举类型需要实现 Serialize
+    source: Option<sea_orm_active_enums::Source>,
+    version: Option<i32>,
+    sharing: Option<sea_orm_active_enums::Sharing>,
+    grayscale: Option<bool>,
+    attribute: Option<sea_orm_active_enums::Attribute>,
+    created_at: Option<DateTime<Utc>>,
+    updated_at: Option<DateTime<Utc>>,
+
+    // 附加字段，所属的 yara file 信息（排除 compiled_data）
+    file: Option<YaraFileWithoutCompiledData>,
+}
+
 /// GET /api/rule/page?page={page}&per_page={per_page}
 /// 分页获得 rule 信息
 #[get("/api/rule/page")]
 async fn api_rule_page(
     db: web::Data<sea_orm::DatabaseConnection>,
-    web::Query(pagination): web::Query<PaginationParams>,
+    web::Query(pagination): web::Query<PaginationParamsApiRulePage>,
 ) -> impl Responder {
     // 默认页码为 1，每页 10 条记录
     let page: u32 = pagination.page.unwrap_or(1);
     let per_page: u32 = pagination.per_page.unwrap_or(10);
     let offset = (page - 1) * per_page;
 
-    // 获取分页数据
-    let rules_result = yara_rules::Entity::find()
-        .order_by_asc(yara_rules::Column::Id)
-        .limit(per_page as u64)
-        .offset(offset as u64)
-        .all(db.get_ref())
-        .await;
-    // 同时查询出总记录数
+    // 先查询总记录数
     let count_result = yara_rules::Entity::find().count(db.get_ref()).await;
 
-    match (rules_result, count_result) {
-        (Ok(rules), Ok(total)) => HttpResponse::Ok().json(json!({
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "items": rules
-        })),
-        (Err(e), _) | (_, Err(e)) => {
-            eprintln!("Error during paginated rules query: {:?}", e);
-            HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+    // 判断是否需要附带 yara file 信息
+    if pagination.file_info.unwrap_or(false) {
+        // 使用 eager loading 的方式，同时查询每个 rule 关联的 yara file 信息
+        // 因为 yara rule 与 yara file 之间是一对一或多对一关系，这里使用 find_also_related
+        let query_result = yara_rules::Entity::find()
+            .order_by_asc(yara_rules::Column::Id)
+            .limit(per_page as u64)
+            .offset(offset as u64)
+            .find_also_related(yara_file::Entity)
+            .all(db.get_ref())
+            .await;
+
+        match (query_result, count_result) {
+            (Ok(results), Ok(total)) => {
+                // results 的类型为 Vec<(yara_rules::Model, Option<yara_file::Model>)>
+                let items: Vec<RuleWithFile> = results
+                    .into_iter()
+                    .map(|(rule, file_opt)| {
+                        // 转换 yara rule 的时间字段从 FixedOffset 到 Utc（假设类型兼容）
+                        // 若你的字段类型为 DateTimeWithTimeZone, 使用 .into() 或 .with_timezone(&Utc)
+                        let converted_last_modified = rule.last_modified_time.into();
+                        let converted_loading_time = rule.loading_time.map(|dt| dt.into());
+                        let converted_created_at = rule.created_at.map(|dt| dt.into());
+                        let converted_updated_at = rule.updated_at.map(|dt| dt.into());
+
+                        // 对关联的 file 同理也进行转换
+                        let file = file_opt.map(|f| YaraFileWithoutCompiledData {
+                            id: f.id,
+                            name: f.name,
+                            last_modified_time: f.last_modified_time.into(),
+                            version: f.version,
+                            description: f.description,
+                            created_at: f.created_at.map(|dt| dt.into()),
+                            updated_at: f.updated_at.map(|dt| dt.into()),
+                            category: f.category,
+                            imports: f.imports,
+                        });
+                        RuleWithFile {
+                            id: rule.id,
+                            name: rule.name,
+                            private: rule.private,
+                            global: rule.global,
+                            auth: rule.auth,
+                            description: rule.description,
+                            tag: rule.tag,
+                            strings: rule.strings,
+                            condition: rule.condition,
+                            last_modified_time: converted_last_modified,
+                            loading_time: converted_loading_time,
+                            belonging: rule.belonging,
+                            verification: rule.verification,
+                            source: rule.source,
+                            version: rule.version,
+                            sharing: rule.sharing,
+                            grayscale: rule.grayscale,
+                            attribute: rule.attribute,
+                            created_at: converted_created_at,
+                            updated_at: converted_updated_at,
+                            file,
+                        }
+                    })
+                    .collect();
+                HttpResponse::Ok().json(json!({
+                    "page": page,
+                    "per_page": per_page,
+                    "total": total,
+                    "items": items
+                }))
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("Error during paginated rules query: {:?}", e);
+                HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+            }
+        }
+    } else {
+        // 仅返回 yara rule 信息，不进行额外关联查询
+        let rules_result = yara_rules::Entity::find()
+            .order_by_asc(yara_rules::Column::Id)
+            .limit(per_page as u64)
+            .offset(offset as u64)
+            .all(db.get_ref())
+            .await;
+        match (rules_result, count_result) {
+            (Ok(rules), Ok(total)) => HttpResponse::Ok().json(json!({
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "items": rules
+            })),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("Error during paginated rules query: {:?}", e);
+                HttpResponse::InternalServerError().json(json!({"message": e.to_string()}))
+            }
         }
     }
 }
