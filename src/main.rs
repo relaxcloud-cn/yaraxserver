@@ -27,7 +27,7 @@ use sea_orm::{DbErr, PaginatorTrait};
 use sea_orm::{FromQueryResult, IntoActiveModel};
 use std::cmp::min;
 // use std::fs::File;
-use tokenizer::Meta;
+// use tokenizer::Meta;
 
 use std::env;
 
@@ -736,7 +736,7 @@ async fn build_tokenizer_yara_file_from_db(
     yara_file_id: i32,
     mut base_yara_file: tokenizer::YaraFile,
 ) -> Result<tokenizer::YaraFile, HttpResponse> {
-    // 先根据 id 查找 YaraFile
+    // 根据 id 查找 YaraFile
     let existing = match YaraFile::find_by_id(yara_file_id).one(db).await {
         Ok(Some(file)) => file,
         Ok(None) => {
@@ -747,7 +747,7 @@ async fn build_tokenizer_yara_file_from_db(
         }
     };
 
-    // 根据找到的 YaraFile 查找所有关联的规则
+    // 查找所有关联的规则
     let rules = match existing.find_related(yara_rules::Entity).all(db).await {
         Ok(rules) => rules,
         Err(e) => {
@@ -758,102 +758,113 @@ async fn build_tokenizer_yara_file_from_db(
 
     // 遍历每个 rule 并转换后 merge 到 base_yara_file 中
     for rule in rules {
-        // let active_rule: yara_rules::ActiveModel = rule.clone().into();
+        // 优雅地解析 rule.strings；若解析出错则输出错误日志并返回空 Vec
+        let strings = match &rule.strings {
+            Some(s) => tokenizer::parse_strings_vec(s.clone()).unwrap_or_else(|e| {
+                eprintln!("Error parsing strings for rule {}: {:?}", rule.name, e);
+                vec![]
+            }),
+            None => vec![],
+        };
+
         let tmp_yara_file = tokenizer::YaraFile {
             modules: vec![],
             rules: vec![tokenizer::YaraRule {
-                name: rule.name,
+                name: rule.name.clone(),
                 private: rule.private.unwrap_or(false),
                 global: rule.global.unwrap_or(false),
-                tags: rule.tag.unwrap_or(vec![]),
+                tags: rule.tag.unwrap_or_default(),
                 meta: vec![
-                    Meta {
+                    tokenizer::Meta {
                         key: "id".to_string(),
                         value: tokenizer::MetaValue::Number(rule.id.into()),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "auth".to_string(),
-                        value: tokenizer::MetaValue::String(rule.auth.unwrap_or("".to_string())),
+                        value: tokenizer::MetaValue::String(rule.auth.unwrap_or_default()),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "description".to_string(),
-                        value: tokenizer::MetaValue::String(
-                            rule.description.unwrap_or("".to_string()),
-                        ),
+                        value: tokenizer::MetaValue::String(rule.description.unwrap_or_default()),
                     },
-                    // Meta {
-                    //     key: "description".to_string(),
-                    //     value: tokenizer::MetaValue::String(
-                    //         rule.description.unwrap_or("".to_string()),
-                    //     ),
-                    // },
-                    Meta {
+                    tokenizer::Meta {
                         key: "last_modified_time".to_string(),
-                        value: tokenizer::MetaValue::String(
-                            Some(rule.last_modified_time)
-                                .map_or(String::new(), |dt| dt.to_string()),
-                        ),
+                        // 如果字段不是 Option，则直接转换为字符串
+                        value: tokenizer::MetaValue::String(rule.last_modified_time.to_string()),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "loading_time".to_string(),
+                        // 如果 loading_time 为 Option，则转换
                         value: tokenizer::MetaValue::String(
-                            rule.loading_time.map_or(String::new(), |dt| dt.to_string()),
+                            rule.loading_time
+                                .map(|dt| dt.to_string())
+                                .unwrap_or_default(),
                         ),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "belonging".to_string(),
                         value: tokenizer::MetaValue::Number(rule.belonging.into()),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "verification".to_string(),
                         value: tokenizer::MetaValue::Boolean(rule.verification.unwrap_or(false)),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "source".to_string(),
                         value: tokenizer::MetaValue::String(
-                            rule.source.unwrap().as_ref().to_string(),
+                            // 如果 rule.source 为 Some，则转换为字符串；否则返回 ""
+                            rule.source
+                                .map(|s| s.as_ref().to_string())
+                                .unwrap_or_else(|| "".to_string()),
                         ),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "version".to_string(),
-                        value: tokenizer::MetaValue::Number(rule.version.unwrap().into()),
+                        value: tokenizer::MetaValue::Number(
+                            rule.version.unwrap_or_default().into(),
+                        ),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "sharing".to_string(),
                         value: tokenizer::MetaValue::String(
-                            rule.sharing.unwrap().as_ref().to_string(),
+                            rule.sharing
+                                .map(|s| s.as_ref().to_string())
+                                .unwrap_or_else(|| "".to_string()),
                         ),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "grayscale".to_string(),
-                        value: tokenizer::MetaValue::Boolean(rule.grayscale.unwrap()),
+                        value: tokenizer::MetaValue::Boolean(rule.grayscale.unwrap_or(false)),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "attribute".to_string(),
                         value: tokenizer::MetaValue::String(
-                            rule.attribute.unwrap().as_ref().to_string(),
+                            rule.attribute
+                                .map(|a| a.as_ref().to_string())
+                                .unwrap_or_else(|| "".to_string()),
                         ),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "created_at".to_string(),
                         value: tokenizer::MetaValue::String(
-                            rule.created_at.map_or(String::new(), |dt| dt.to_string()),
+                            rule.created_at.map(|dt| dt.to_string()).unwrap_or_default(),
                         ),
                     },
-                    Meta {
+                    tokenizer::Meta {
                         key: "updated_at".to_string(),
                         value: tokenizer::MetaValue::String(
-                            rule.updated_at.map_or(String::new(), |dt| dt.to_string()),
+                            rule.updated_at.map(|dt| dt.to_string()).unwrap_or_default(),
                         ),
                     },
                 ],
-                strings: tokenizer::parse_strings_vec(rule.strings.unwrap()).unwrap(),
-                condition: rule.condition.unwrap_or("".to_string()),
+                strings,
+                condition: rule.condition.unwrap_or_default(),
             }],
         };
+
         base_yara_file.merge(tmp_yara_file);
     }
-    base_yara_file.modules = existing.imports.unwrap_or(vec![]);
+    base_yara_file.modules = existing.imports.unwrap_or_default();
     Ok(base_yara_file)
 }
 
