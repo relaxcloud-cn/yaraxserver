@@ -1429,8 +1429,15 @@ async fn api_yara_file_page(
     let per_page: u32 = pagination.per_page.unwrap_or(10);
     let offset = (page - 1) * per_page;
 
-    // 使用 eager loading 同时查询 yara_file 与其关联的 yara_rules
-    let file_with_rules_result = yara_file::Entity::find()
+    let base_query = yara_file::Entity::find();
+
+    let count_result = base_query
+        .clone()
+        .group_by(yara_file::Column::Id)
+        .count(db.get_ref())
+        .await;
+
+    let file_with_rules_result = base_query
         .order_by_asc(yara_file::Column::Id)
         .limit(per_page as u64)
         .offset(offset as u64)
@@ -1438,16 +1445,12 @@ async fn api_yara_file_page(
         .all(db.get_ref())
         .await;
 
-    // 分页查询总数
-    let count_result = yara_file::Entity::find().count(db.get_ref()).await;
-
     match (file_with_rules_result, count_result) {
         (Ok(files_with_rules), Ok(total)) => {
             // files_with_rules 的类型为 Vec<(yara_file::Model, Vec<yara_rules::Model>)>
             let items: Vec<YaraFileWithRules> = files_with_rules
                 .into_iter()
                 .map(|(file, rules)| {
-                    // 提取 rule 的摘要信息，仅保留 id 与 name
                     let rule_summaries: Vec<YaraRuleSummary> = rules
                         .into_iter()
                         .map(|rule| YaraRuleSummary {
@@ -1459,7 +1462,6 @@ async fn api_yara_file_page(
                     YaraFileWithRules {
                         id: file.id,
                         name: file.name,
-                        // 使用 .into() 或 .with_timezone(&Utc) 将 DateTime<FixedOffset> 转换为 DateTime<Utc>
                         last_modified_time: file.last_modified_time.into(),
                         version: file.version,
                         description: file.description,
@@ -1476,7 +1478,7 @@ async fn api_yara_file_page(
                 "page": page,
                 "per_page": per_page,
                 "total": total,
-                "items": items
+                "items": items,
             }))
         }
         (Err(e), _) | (_, Err(e)) => {
