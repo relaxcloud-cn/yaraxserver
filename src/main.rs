@@ -1353,6 +1353,18 @@ async fn api_rule_history(
 }
 
 /// ------------------- APIs for Yara Files ------------------------------
+#[derive(FromQueryResult, Debug, Serialize)]
+pub struct YaraFileGet {
+    pub id: i32,
+    pub name: String,
+    pub last_modified_time: DateTime<Utc>,
+    pub version: Option<i32>,
+    pub description: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub category: Option<String>,
+    pub imports: Option<Vec<String>>,
+}
 
 /// GET /api/yara_file/get?id={id}
 /// 根据 query 参数获得单个 yara file 信息
@@ -1362,10 +1374,20 @@ async fn api_yara_file_get(
     web::Query(info): web::Query<IdParam>,
 ) -> impl Responder {
     let file_id = info.id;
-    match yara_file::Entity::find_by_id(file_id)
-        .one(db.get_ref())
-        .await
-    {
+    let query = yara_file::Entity::find_by_id(file_id)
+        .select_only()
+        .column(yara_file::Column::Id)
+        .column(yara_file::Column::Name)
+        .column(yara_file::Column::LastModifiedTime)
+        .column(yara_file::Column::Version)
+        .column(yara_file::Column::Description)
+        .column(yara_file::Column::CreatedAt)
+        .column(yara_file::Column::UpdatedAt)
+        .column(yara_file::Column::Category)
+        .column(yara_file::Column::Imports)
+        .into_model::<YaraFileGet>();
+
+    match query.one(db.get_ref()).await {
         Ok(Some(file)) => HttpResponse::Ok().json(file),
         Ok(None) => HttpResponse::NotFound().json(json!({"message": "Yara file not found"})),
         Err(e) => {
