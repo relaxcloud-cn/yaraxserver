@@ -104,7 +104,7 @@ struct ConvertToJSONRequestBody {
 }
 
 #[get("/")]
-async fn version() -> impl Responder {
+async fn get_version() -> impl Responder {
     HttpResponse::Ok().body("0.13.0")
 }
 
@@ -1990,7 +1990,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(pool.clone())
             .service(json_convert_to_text)
             .service(convert_to_json)
-            .service(version)
+            .service(get_version)
             .service(file_convert_to_json)
             .service(get_all_rules)
             .service(get_rule_by_id)
